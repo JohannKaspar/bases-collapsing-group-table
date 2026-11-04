@@ -1217,7 +1217,9 @@ const buildTable = (container: HTMLElement, args: BuildTableArgs): void => {
       node.children.size,
       treePrefix,
       undefined,
-      myPath,
+      // Only the deepest level accepts drops, so every grouping property is set
+      // together; a drop on an upper level would leave the lower ones stale.
+      depth === levelKeys.length - 1 ? myPath : undefined,
     )
     const childAncestors = [...ancestors, node.key]
     const childPrefix = depth === 0 ? '' : prefix + (isLast ? '    ' : '│   ')
