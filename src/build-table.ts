@@ -717,7 +717,9 @@ const buildTable = (container: HTMLElement, args: BuildTableArgs): void => {
     cellTd.addClass('bcgt-cell-editable')
     cellTd.addEventListener('click', (evt) => {
       if ((evt.target as HTMLElement).closest('a, input, textarea, button')) return
-      const menu = new Menu()
+      // Obsidian's own menu, not the macOS native one: native menus show plain
+      // text only, so the value pills would lose their colour.
+      const menu = new Menu().setUseNativeMenu(false)
       const choices = options.includes(cur) || !cur ? options : [cur, ...options]
       for (const opt of choices) {
         menu.addItem((item) =>
