@@ -948,3 +948,17 @@
     opacity: 0.85;
   }
 }
+
+/* Fixed-option dropdown cells: the value as a neutral pill. Vault snippets can
+   colour it per value via [data-prop] / [data-value]. */
+.bcgt-pill {
+  display: inline-block;
+  padding: 0 8px;
+  border-radius: 10px;
+  font-size: 0.82em;
+  font-weight: 600;
+  line-height: 1.65;
+  white-space: nowrap;
+  background: var(--background-modifier-hover);
+  border: 1px solid var(--background-modifier-border);
+}

@@ -21,4 +21,8 @@ export interface TableSettings {
   // string = use Obsidian's default date rendering. Works around the Bases API
   // not exposing the per-property date format to custom views.
   dateFormat: string
+  // Note properties edited through a fixed-option dropdown (key without the
+  // "note." prefix → allowed values). Merged from the plugin setting and the
+  // view's own "Dropdown options".
+  selectOptions: Map<string, string[]>
 }

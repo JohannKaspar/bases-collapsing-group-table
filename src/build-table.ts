@@ -11,6 +11,7 @@ import {
   DurationValue,
   FileValue,
   ListValue,
+  Menu,
   NumberValue,
   StringValue,
   Value,
@@ -634,6 +635,60 @@ const buildTable = (container: HTMLElement, args: BuildTableArgs): void => {
     })
   }
 
+  // Fixed-option property: the value shows as a pill; clicking the cell opens a
+  // menu of the allowed values (plus the current value if it is not one of
+  // them) and writes the pick to frontmatter.
+  const renderSelect = (
+    inner: HTMLElement,
+    cellTd: HTMLElement,
+    entry: BasesEntry,
+    col: BasesPropertyId,
+    options: string[],
+  ): void => {
+    const key = col.slice('note.'.length)
+    const value = valueOf(entry, col)
+    const cur = value === null ? '' : value.toString()
+    if (cur) {
+      inner.createSpan({
+        cls: 'bcgt-pill',
+        text: cur,
+        attr: { 'data-prop': key, 'data-value': cur },
+      })
+    }
+    const file = entry.file
+    if (!file) return
+    cellTd.addClass('bcgt-cell-editable')
+    cellTd.addEventListener('click', (evt) => {
+      if ((evt.target as HTMLElement).closest('a, input, textarea, button')) return
+      const menu = new Menu()
+      const choices = options.includes(cur) || !cur ? options : [cur, ...options]
+      for (const opt of choices) {
+        menu.addItem((item) =>
+          item
+            .setTitle(opt)
+            .setChecked(opt === cur)
+            .onClick(() => {
+              if (opt === cur) return
+              void app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
+                fm[key] = opt
+              })
+            }),
+        )
+      }
+      if (cur) {
+        menu.addSeparator()
+        menu.addItem((item) =>
+          item.setTitle('Clear').onClick(() => {
+            void app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
+              delete fm[key]
+            })
+          }),
+        )
+      }
+      menu.showAtMouseEvent(evt)
+    })
+  }
+
   // Strip a leading '#' so tags persist in clean frontmatter form.
   const cleanTag = (s: string): string => s.replace(/^#/, '').trim()
 
@@ -820,6 +875,15 @@ const buildTable = (container: HTMLElement, args: BuildTableArgs): void => {
         })
         return
       })
+      return
+    }
+
+    // Fixed-option dropdown for configured note properties.
+    const selectOpts = col.startsWith('note.')
+      ? settings.selectOptions.get(col.slice('note.'.length))
+      : undefined
+    if (selectOpts) {
+      renderSelect(inner, cellTd, entry, col, selectOpts)
       return
     }
 

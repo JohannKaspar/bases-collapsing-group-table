@@ -3,6 +3,7 @@ import buildTable, { type BuildTableArgs } from './build-table'
 import buildCards from './build-cards'
 import renderError from './render-error'
 import type { TableSettings } from './types'
+import { mergeSelectOptions } from './select-options'
 
 export const VIEW_TYPE = 'collapsing-group-table'
 export const VIEW_TYPE_CARDS = 'collapsing-group-cards'
@@ -34,15 +35,19 @@ export class GroupTableView extends BasesView {
   // dateFormat overrides it. Injected by the factory so the view stays decoupled
   // from the plugin class (no circular import).
   private getGlobalDateFormat: () => string
+  // Vault-wide dropdown options from the plugin settings tab (raw text).
+  private getGlobalSelectOptions: () => string
 
   constructor(
     controller: QueryController,
     parentEl: HTMLElement,
     getGlobalDateFormat: () => string = () => '',
+    getGlobalSelectOptions: () => string = () => '',
   ) {
     super(controller)
     this.viewContainerEl = parentEl.createDiv('bcgt-view')
     this.getGlobalDateFormat = getGlobalDateFormat
+    this.getGlobalSelectOptions = getGlobalSelectOptions
   }
 
   onDataUpdated(): void {
@@ -171,6 +176,7 @@ export class GroupTableView extends BasesView {
   private readSettings(): TableSettings {
     const df = this.config.get('dateFormat')
     const rh = this.config.get('rowHeight')
+    const so = this.config.get('selectOptions')
     return {
       rowHeight: typeof rh === 'string' ? rh : 'short',
       accordion: this.config.get('accordion') === true,
@@ -184,6 +190,7 @@ export class GroupTableView extends BasesView {
         : 'first',
       // Per-view value wins; blank inherits the global setting.
       dateFormat: (typeof df === 'string' && df.trim()) || this.getGlobalDateFormat(),
+      selectOptions: mergeSelectOptions(this.getGlobalSelectOptions(), typeof so === 'string' ? so : ''),
     }
   }
 

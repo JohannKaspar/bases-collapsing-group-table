@@ -7,6 +7,7 @@ interface PluginData {
   lastVersion?: string
   showChangelog?: boolean
   dateFormat?: string
+  selectOptions?: string
 }
 
 export default class CollapsingGroupTablePlugin extends Plugin {
@@ -20,6 +21,7 @@ export default class CollapsingGroupTablePlugin extends Plugin {
     if (raw && typeof raw.lastVersion === 'string') this.data.lastVersion = raw.lastVersion
     if (raw && typeof raw.showChangelog === 'boolean') this.data.showChangelog = raw.showChangelog
     if (raw && typeof raw.dateFormat === 'string') this.data.dateFormat = raw.dateFormat
+    if (raw && typeof raw.selectOptions === 'string') this.data.selectOptions = raw.selectOptions
     this.addSettingTab(new CgtSettingTab(this.app, this))
     // Show "what's new" once after an update (not on first install), if enabled.
     const current = this.manifest.version
@@ -110,7 +112,12 @@ export default class CollapsingGroupTablePlugin extends Plugin {
       name: 'Collapsing group table',
       icon: 'lucide-list-tree',
       factory: (controller, containerEl) =>
-        new GroupTableView(controller, containerEl, () => this.data.dateFormat ?? ''),
+        new GroupTableView(
+          controller,
+          containerEl,
+          () => this.data.dateFormat ?? '',
+          () => this.data.selectOptions ?? '',
+        ),
       options: (config: BasesViewConfig): BasesAllOptions[] => [
         {
           type: 'group',
@@ -136,6 +143,13 @@ export default class CollapsingGroupTablePlugin extends Plugin {
               default: '',
               placeholder: 'YYYY-MM-DD',
             },
+            {
+              type: 'text',
+              displayName: 'Dropdown options (overrides the plugin setting per property)',
+              key: 'selectOptions',
+              default: '',
+              placeholder: 'status: backlog, active, done; priority: high, low',
+            },
           ],
         },
         groupingGroup(config),
@@ -147,7 +161,12 @@ export default class CollapsingGroupTablePlugin extends Plugin {
       name: 'Collapsing group cards',
       icon: 'lucide-layout-grid',
       factory: (controller, containerEl) =>
-        new GroupCardsView(controller, containerEl, () => this.data.dateFormat ?? ''),
+        new GroupCardsView(
+          controller,
+          containerEl,
+          () => this.data.dateFormat ?? '',
+          () => this.data.selectOptions ?? '',
+        ),
       options: (config: BasesViewConfig): BasesAllOptions[] => [
         {
           type: 'group',
@@ -248,6 +267,22 @@ class CgtSettingTab extends PluginSettingTab {
             await this.plugin.saveData(this.plugin.data)
           }),
       )
+    new Setting(this.containerEl)
+      .setName('Dropdown options')
+      .setDesc(
+        'One property per line, e.g. "priority: critical, high, normal, low". In the table view these properties show as pills and are edited from a fixed list. A view\'s own Dropdown options replace a line here for the same property.',
+      )
+      .addTextArea((area) => {
+        area.inputEl.rows = 6
+        area.inputEl.addClass('bcgt-select-options-setting')
+        area
+          .setPlaceholder('priority: critical, high, normal, low')
+          .setValue(this.plugin.data.selectOptions ?? '')
+          .onChange(async (value) => {
+            this.plugin.data.selectOptions = value
+            await this.plugin.saveData(this.plugin.data)
+          })
+      })
     new Setting(this.containerEl)
       .setName("Show what's new on update")
       .setDesc('Open a changelog popup the first time you run a new version.')
