@@ -3,7 +3,7 @@ import buildTable, { type BuildTableArgs } from './build-table'
 import buildCards from './build-cards'
 import renderError from './render-error'
 import type { TableSettings } from './types'
-import { mergeSelectOptions } from './select-options'
+import { mergeSelectOptions, parseSelectOptions } from './select-options'
 
 export const VIEW_TYPE = 'collapsing-group-table'
 export const VIEW_TYPE_CARDS = 'collapsing-group-cards'
@@ -37,17 +37,21 @@ export class GroupTableView extends BasesView {
   private getGlobalDateFormat: () => string
   // Vault-wide dropdown options from the plugin settings tab (raw text).
   private getGlobalSelectOptions: () => string
+  // Vault-wide drag-and-drop inverse links (raw text).
+  private getDropInverse: () => string
 
   constructor(
     controller: QueryController,
     parentEl: HTMLElement,
     getGlobalDateFormat: () => string = () => '',
     getGlobalSelectOptions: () => string = () => '',
+    getDropInverse: () => string = () => '',
   ) {
     super(controller)
     this.viewContainerEl = parentEl.createDiv('bcgt-view')
     this.getGlobalDateFormat = getGlobalDateFormat
     this.getGlobalSelectOptions = getGlobalSelectOptions
+    this.getDropInverse = getDropInverse
   }
 
   onDataUpdated(): void {
@@ -191,6 +195,7 @@ export class GroupTableView extends BasesView {
       // Per-view value wins; blank inherits the global setting.
       dateFormat: (typeof df === 'string' && df.trim()) || this.getGlobalDateFormat(),
       selectOptions: mergeSelectOptions(this.getGlobalSelectOptions(), typeof so === 'string' ? so : ''),
+      dropInverse: parseSelectOptions(this.getDropInverse()),
     }
   }
 

@@ -14,6 +14,7 @@ import {
   Menu,
   NumberValue,
   StringValue,
+  TFile,
   Value,
   setIcon,
 } from 'obsidian'
@@ -23,8 +24,56 @@ import { formatDate } from './format-date'
 
 // Inline-editable note-property types (written back to frontmatter).
 type EditType = 'bool' | 'number' | 'date' | 'text' | 'list'
+// One grouping level a dropped row is moved into: the frontmatter key and a row
+// already in that group to copy the value from (null = the "(none)" group).
+interface DropLevel {
+  key: string
+  source: BasesEntry | null
+}
 // How a list column's items behave for autocomplete.
 type ListKind = 'tag' | 'link' | 'plain'
+
+// Obsidian's property registry (Settings → Properties). Not in the public
+// typings, so every accessor is optional and failures fall back to sampling.
+interface MetadataTypeManagerLike {
+  getAssignedWidget?: (name: string) => string | null | undefined
+  getAssignedType?: (name: string) => string | null | undefined
+  properties?: Record<string, { type?: string; widget?: string } | undefined>
+}
+
+// The edit type a property is declared with, or null when undeclared or of a
+// kind we do not edit (datetime keeps the sampled behaviour).
+const declaredTypeOf = (app: App, key: string): { type: EditType; kind?: ListKind } | null => {
+  const mtm = (app as unknown as { metadataTypeManager?: MetadataTypeManagerLike }).metadataTypeManager
+  if (!mtm) return null
+  let t: string | null | undefined
+  try {
+    t = mtm.getAssignedWidget?.(key) ?? mtm.getAssignedType?.(key)
+    if (!t) {
+      const info = mtm.properties?.[key.toLowerCase()]
+      t = info?.widget ?? info?.type
+    }
+  } catch {
+    return null
+  }
+  switch (t) {
+    case 'date':
+      return { type: 'date' }
+    case 'number':
+      return { type: 'number' }
+    case 'checkbox':
+      return { type: 'bool' }
+    case 'text':
+      return { type: 'text' }
+    case 'tags':
+      return { type: 'list', kind: 'tag' }
+    case 'multitext':
+    case 'aliases':
+      return { type: 'list', kind: 'plain' }
+    default:
+      return null
+  }
+}
 
 // Visible line count per row-height preset (mirrors --bcgt-lines in styles.css);
 // used to size the multi-line text editor.
@@ -415,12 +464,20 @@ const buildTable = (container: HTMLElement, args: BuildTableArgs): void => {
     return 'text'
   }
 
-  // Inline-editable type per note-source column (frontmatter-backed). Sampled
-  // from the data since the API doesn't expose declared property types.
+  // Inline-editable type per note-source column (frontmatter-backed). The type
+  // declared in Obsidian's property registry wins; otherwise it is sampled from
+  // the data. Without the declared type a column whose sampled rows are all
+  // empty (e.g. a mostly unset `due`) would stay read-only.
   const editTypeOf = new Map<string, EditType>()
   const listKindOf = new Map<string, ListKind>()
   for (const col of columns) {
     if (!col.startsWith('note.')) continue
+    const declared = declaredTypeOf(app, col.slice('note.'.length))
+    if (declared) {
+      editTypeOf.set(col, declared.type)
+      if (declared.kind) listKindOf.set(col, declared.kind)
+      continue
+    }
     for (const entry of sampleEntries) {
       let v: Value | null = null
       try {
@@ -665,7 +722,11 @@ const buildTable = (container: HTMLElement, args: BuildTableArgs): void => {
       for (const opt of choices) {
         menu.addItem((item) =>
           item
-            .setTitle(opt)
+            .setTitle(
+              createFragment((f) => {
+                f.createSpan({ cls: 'bcgt-pill', text: opt, attr: { 'data-prop': key, 'data-value': opt } })
+              }),
+            )
             .setChecked(opt === cur)
             .onClick(() => {
               if (opt === cur) return
@@ -923,6 +984,104 @@ const buildTable = (container: HTMLElement, args: BuildTableArgs): void => {
     renderValue(inner, entry, col)
   }
 
+  // ---- drag-and-drop between groups ----
+  // A row dropped on a group header takes that group's value for every grouping
+  // level down to the header (top group, then each sub-group). The value is
+  // copied from the frontmatter of a row already in the group, so link lists
+  // and their exact wording carry over; dropping on "(none)" clears it.
+  let dragged: BasesEntry | null = null
+
+  // Property key (frontmatter name) of each grouping level; null when a level
+  // is not a plain note property (file./formula. groupings cannot be written).
+  const noteKey = (prop: string | undefined): string | null => {
+    if (!prop) return null
+    if (prop.startsWith('note.')) return prop.slice('note.'.length)
+    if (prop.includes('.')) return null
+    return prop
+  }
+  const groupByProp = (config as unknown as { groupBy?: { property?: string } }).groupBy?.property
+  const levelKeys: (string | null)[] = [noteKey(groupByProp), ...settings.subCols.map((c) => noteKey(c))]
+
+  const firstEntry = (node: TreeNode): BasesEntry | null => {
+    if (node.entries.length > 0) return node.entries[0]
+    for (const c of node.children.values()) {
+      const e = firstEntry(c)
+      if (e) return e
+    }
+    return null
+  }
+
+  const frontmatterOf = (file: TFile): Record<string, unknown> | undefined =>
+    app.metadataCache.getFileCache(file)?.frontmatter as Record<string, unknown> | undefined
+
+  const asList = (v: unknown): string[] =>
+    Array.isArray(v) ? v.map((x) => String(x)) : v === undefined || v === null || v === '' ? [] : [String(v)]
+
+  // Notes linked from a frontmatter value ("[[Note]]" strings, single or list).
+  const linkedFiles = (v: unknown, sourcePath: string): TFile[] => {
+    const out: TFile[] = []
+    for (const s of asList(v)) {
+      const m = s.match(/\[\[([^\]|#]+)/)
+      const dest = m ? app.metadataCache.getFirstLinkpathDest(m[1].trim(), sourcePath) : null
+      if (dest && !out.some((f) => f.path === dest.path)) out.push(dest)
+    }
+    return out
+  }
+
+  const moveEntry = async (entry: BasesEntry, path: DropLevel[]): Promise<void> => {
+    const file = entry.file
+    if (!file) return
+    for (const lvl of path) {
+      const sourceFile = lvl.source?.file ?? null
+      if (lvl.source && !sourceFile) continue
+      const newVal = sourceFile ? frontmatterOf(sourceFile)?.[lvl.key] : undefined
+      if (sourceFile && newVal === undefined) continue
+      const inverse = settings.dropInverse.get(lvl.key)?.[0]
+      if (inverse) {
+        const oldTargets = linkedFiles(frontmatterOf(file)?.[lvl.key], file.path)
+        const newTargets = linkedFiles(newVal, file.path)
+        const pointsHere = (s: string, from: TFile): boolean => linkedFiles(s, from.path).some((f) => f.path === file.path)
+        for (const t of oldTargets) {
+          if (newTargets.some((n) => n.path === t.path)) continue
+          await app.fileManager.processFrontMatter(t, (fm: Record<string, unknown>) => {
+            const kept = asList(fm[inverse]).filter((s) => !pointsHere(s, t))
+            if (kept.length > 0) fm[inverse] = kept
+            else delete fm[inverse]
+          })
+        }
+        for (const t of newTargets) {
+          if (oldTargets.some((o) => o.path === t.path)) continue
+          await app.fileManager.processFrontMatter(t, (fm: Record<string, unknown>) => {
+            const list = asList(fm[inverse])
+            if (!list.some((s) => pointsHere(s, t))) fm[inverse] = [...list, `[[${file.basename}]]`]
+          })
+        }
+      }
+      await app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
+        if (newVal === undefined) delete fm[lvl.key]
+        else fm[lvl.key] = Array.isArray(newVal) ? [...(newVal as unknown[])] : newVal
+      })
+    }
+  }
+
+  // Make a header row accept dropped rows (only when every level is writable).
+  const makeDropTarget = (tr: HTMLElement, path: DropLevel[] | undefined): void => {
+    if (!path || path.length === 0) return
+    tr.addEventListener('dragover', (evt) => {
+      if (!dragged) return
+      evt.preventDefault()
+      tr.addClass('bcgt-drop-target')
+    })
+    tr.addEventListener('dragleave', () => tr.removeClass('bcgt-drop-target'))
+    tr.addEventListener('drop', (evt) => {
+      evt.preventDefault()
+      tr.removeClass('bcgt-drop-target')
+      const entry = dragged
+      dragged = null
+      if (entry) void moveEntry(entry, path)
+    })
+  }
+
   const renderDataRow = (
     tbody: HTMLElement,
     entry: BasesEntry,
@@ -931,6 +1090,16 @@ const buildTable = (container: HTMLElement, args: BuildTableArgs): void => {
   ): void => {
     const row = tbody.createEl('tr', { cls: 'bcgt-row' })
     rowMeta.push({ el: row, ancestors })
+    if (entry.file) {
+      row.draggable = true
+      row.addEventListener('dragstart', (evt) => {
+        dragged = entry
+        evt.dataTransfer?.setData('text/plain', entry.file?.path ?? '')
+      })
+      row.addEventListener('dragend', () => {
+        dragged = null
+      })
+    }
     columns.forEach((col, ci) => {
       const td = row.createEl('td', { cls: 'bcgt-cell' })
       if (ci === 0 && treePrefix) {
@@ -964,7 +1133,7 @@ const buildTable = (container: HTMLElement, args: BuildTableArgs): void => {
   }
 
   // A collapsible header row (top group or, when depth > 0, a sub-group). Single
-  // spanning cell; sub-groups are indented by depth and show a "A → B" breadcrumb.
+  // spanning cell; sub-groups are indented by depth.
   const renderHeader = (
     tbody: HTMLElement,
     depth: number,
@@ -975,6 +1144,7 @@ const buildTable = (container: HTMLElement, args: BuildTableArgs): void => {
     subCount: number,
     treePrefix: string,
     labelValue?: Value | null,
+    drop?: DropLevel[],
   ): void => {
     allFoldKeys.add(foldKey)
     const isTop = depth === 0
@@ -1006,6 +1176,7 @@ const buildTable = (container: HTMLElement, args: BuildTableArgs): void => {
       inner.createSpan({ cls: 'bcgt-subgroup-tally', text: String(subCount) })
     }
     tr.addEventListener('click', () => (isTop ? toggleTop(foldKey) : toggleFold(foldKey)))
+    makeDropTarget(tr, drop)
   }
 
   // ---- Option X: split each group value on '/' into a nested tree ----
@@ -1020,26 +1191,38 @@ const buildTable = (container: HTMLElement, args: BuildTableArgs): void => {
     labelPath: string[],
     prefix: string,
     isLast: boolean,
+    dropPath: DropLevel[] | undefined,
   ): void => {
     const segLabel = node.label === '__bcgt_none__' ? '(none)' : cleanLabel(node.label)
     const breadcrumb = [...labelPath, segLabel]
     const treePrefix = depth === 0 ? '' : prefix + (isLast ? '└── ' : '├── ')
+    // Drop path down to this header; undefined once a level is not writable
+    // (or when the "/" split builds the levels from one property).
+    const levelKey = settings.subGroup ? null : levelKeys[depth] ?? null
+    const myPath =
+      dropPath && levelKey
+        ? [...dropPath, { key: levelKey, source: node.label === '__bcgt_none__' ? null : firstEntry(node) }]
+        : undefined
     renderHeader(
       tbody,
       depth,
       node.key,
       ancestors,
-      breadcrumb.join(' → '),
+      // Only this level's value: the indent already shows the parent, and the
+      // full "A → B" breadcrumb crowded the header.
+      segLabel,
       nodeTotal(node),
       node.children.size,
       treePrefix,
+      undefined,
+      myPath,
     )
     const childAncestors = [...ancestors, node.key]
     const childPrefix = depth === 0 ? '' : prefix + (isLast ? '    ' : '│   ')
     const kids = [...node.children.values()]
     const total = kids.length + node.entries.length
     kids.forEach((child, i) => {
-      renderNode(tbody, child, depth + 1, childAncestors, breadcrumb, childPrefix, i === total - 1)
+      renderNode(tbody, child, depth + 1, childAncestors, breadcrumb, childPrefix, i === total - 1, myPath)
     })
     node.entries.forEach((entry, j) => {
       const last = kids.length + j === total - 1
@@ -1082,7 +1265,7 @@ const buildTable = (container: HTMLElement, args: BuildTableArgs): void => {
       console.log("rendering root", root);
       const tbody = table.createEl('tbody', { cls: 'bcgt-group' })
       console.log("tbody count (nested loop):", table.querySelectorAll("tbody").length);
-      renderNode(tbody, root, 0, [], [], '', true);
+      renderNode(tbody, root, 0, [], [], '', true, [])
     }
   } else {
     // Flat: one tbody per Bases group (sub-grouping off, or no groupBy). No tree
@@ -1096,7 +1279,9 @@ const buildTable = (container: HTMLElement, args: BuildTableArgs): void => {
       if (isGrouped) {
         const hasKey = group.hasKey() && group.key
         const labelStr = hasKey ? cleanLabel(group.key!.toString()) : '(none)'
-        renderHeader(tbody, 0, topKey, [], labelStr, group.entries.length, 0, '')
+        const gk = levelKeys[0]
+        const flatPath = gk ? [{ key: gk, source: hasKey ? group.entries[0] ?? null : null }] : undefined
+        renderHeader(tbody, 0, topKey, [], labelStr, group.entries.length, 0, '', undefined, flatPath)
         baseAncestors = [topKey]
       }
       for (const entry of group.entries) renderDataRow(tbody, entry, baseAncestors, '')

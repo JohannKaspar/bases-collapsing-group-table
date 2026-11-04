@@ -962,3 +962,105 @@
   background: var(--background-modifier-hover);
   border: 1px solid var(--background-modifier-border);
 }
+
+/* ===== Native look =====
+   Match the built-in Bases table: its row height, font size, header and group
+   colours (the --bases-table-* variables, with fallbacks), plain group counts,
+   hairline tree rails and the text font in the first column. */
+.bcgt-table {
+  font-size: var(--bases-table-font-size, var(--font-smaller));
+}
+
+.bcgt-col-header {
+  font-weight: var(--font-normal);
+  color: var(--bases-table-header-color, var(--text-muted));
+  background-color: var(--bases-table-header-background, transparent);
+  border-bottom: var(--border-width, 1px) solid var(--table-border-color, var(--background-modifier-border));
+}
+
+.bcgt-cell {
+  height: var(--bases-table-row-height, 30px);
+  padding-top: 0;
+  padding-bottom: 0;
+  vertical-align: middle;
+  border-bottom: var(--border-width, 1px) solid var(--table-border-color, var(--background-modifier-border));
+  border-right: var(--border-width, 1px) solid var(--table-border-color, var(--background-modifier-border));
+}
+
+.bcgt-row:hover .bcgt-cell {
+  background-color: var(--bases-table-row-background-hover, var(--background-modifier-hover));
+}
+
+.bcgt-row > .bcgt-cell:first-child .bcgt-cell-content,
+.bcgt-subgroup-cell .bcgt-group-label {
+  font-family: inherit;
+}
+
+.bcgt-group-cell,
+.bcgt-subgroup-cell {
+  height: var(--bases-table-row-height, 30px);
+  background-color: var(--bases-table-group-background, var(--background-secondary));
+  border-top: none;
+  border-bottom: var(--border-width, 1px) solid var(--table-border-color, var(--background-modifier-border));
+  color: var(--text-normal);
+}
+
+.bcgt-group-cell {
+  font-weight: var(--bases-group-heading-value-weight, var(--font-semibold));
+  padding-top: var(--size-4-3);
+}
+
+.bcgt-subgroup-cell {
+  font-weight: var(--font-medium);
+}
+
+.bcgt-group-header:hover .bcgt-group-cell,
+.bcgt-subgroup-header:hover .bcgt-subgroup-cell {
+  filter: none;
+}
+
+.bcgt-group-count,
+.bcgt-subgroup-tally {
+  color: var(--text-faint);
+  background-color: transparent;
+  padding: 0;
+  font-weight: var(--font-normal);
+}
+
+.bcgt-seg-v::before,
+.bcgt-seg-tee::before,
+.bcgt-seg-ell::before {
+  border-left-width: 1px;
+  border-left-color: var(--background-modifier-border);
+}
+
+.bcgt-seg-tee::after,
+.bcgt-seg-ell::after {
+  border-top-width: 1px;
+  border-top-color: var(--background-modifier-border);
+}
+
+.bcgt-stats {
+  display: none;
+}
+
+.bcgt-controls button.bcgt-control-btn {
+  color: var(--text-muted);
+  border-color: transparent;
+}
+
+.bcgt-controls button.bcgt-control-btn:hover {
+  color: var(--text-normal);
+  background-color: var(--background-modifier-hover);
+  border-color: transparent;
+}
+
+/* Drag-and-drop: rows can be dragged onto a group header. */
+.bcgt-row[draggable='true'] {
+  cursor: grab;
+}
+
+.bcgt-drop-target .bcgt-group-cell,
+.bcgt-drop-target .bcgt-subgroup-cell {
+  box-shadow: inset 0 0 0 2px var(--interactive-accent);
+}

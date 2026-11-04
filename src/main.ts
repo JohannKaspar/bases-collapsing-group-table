@@ -8,6 +8,7 @@ interface PluginData {
   showChangelog?: boolean
   dateFormat?: string
   selectOptions?: string
+  dropInverse?: string
 }
 
 export default class CollapsingGroupTablePlugin extends Plugin {
@@ -22,6 +23,7 @@ export default class CollapsingGroupTablePlugin extends Plugin {
     if (raw && typeof raw.showChangelog === 'boolean') this.data.showChangelog = raw.showChangelog
     if (raw && typeof raw.dateFormat === 'string') this.data.dateFormat = raw.dateFormat
     if (raw && typeof raw.selectOptions === 'string') this.data.selectOptions = raw.selectOptions
+    if (raw && typeof raw.dropInverse === 'string') this.data.dropInverse = raw.dropInverse
     this.addSettingTab(new CgtSettingTab(this.app, this))
     // Show "what's new" once after an update (not on first install), if enabled.
     const current = this.manifest.version
@@ -117,6 +119,7 @@ export default class CollapsingGroupTablePlugin extends Plugin {
           containerEl,
           () => this.data.dateFormat ?? '',
           () => this.data.selectOptions ?? '',
+          () => this.data.dropInverse ?? '',
         ),
       options: (config: BasesViewConfig): BasesAllOptions[] => [
         {
@@ -166,6 +169,7 @@ export default class CollapsingGroupTablePlugin extends Plugin {
           containerEl,
           () => this.data.dateFormat ?? '',
           () => this.data.selectOptions ?? '',
+          () => this.data.dropInverse ?? '',
         ),
       options: (config: BasesViewConfig): BasesAllOptions[] => [
         {
@@ -280,6 +284,21 @@ class CgtSettingTab extends PluginSettingTab {
           .setValue(this.plugin.data.selectOptions ?? '')
           .onChange(async (value) => {
             this.plugin.data.selectOptions = value
+            await this.plugin.saveData(this.plugin.data)
+          })
+      })
+    new Setting(this.containerEl)
+      .setName('Drag-and-drop back-links')
+      .setDesc(
+        'Rows can be dragged onto a group header to take that group\'s values. For a link property, name the list on the linked notes that points back, one per line, e.g. "experiment: tasks". The old target loses the row from that list and the new target gains it.',
+      )
+      .addTextArea((area) => {
+        area.inputEl.rows = 3
+        area
+          .setPlaceholder('experiment: tasks')
+          .setValue(this.plugin.data.dropInverse ?? '')
+          .onChange(async (value) => {
+            this.plugin.data.dropInverse = value
             await this.plugin.saveData(this.plugin.data)
           })
       })

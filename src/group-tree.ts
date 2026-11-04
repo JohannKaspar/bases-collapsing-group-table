@@ -86,7 +86,10 @@ export const buildGroupTree = (
     const order: string[] = []
     for (const e of entries) {
       const v = valueOf(e, col as BasesPropertyId)
-      const k = v === null ? '__bcgt_none__' : v.toString()
+      // An unset property arrives as a null Value whose text is "null"; bucket
+      // it with the real nulls so it shows as "(none)".
+      const raw = v === null ? '' : v.toString()
+      const k = raw === '' || raw === 'null' ? '__bcgt_none__' : raw
       let bucket = buckets.get(k)
       if (!bucket) {
         bucket = []

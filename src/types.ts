@@ -25,4 +25,8 @@ export interface TableSettings {
   // "note." prefix → allowed values). Merged from the plugin setting and the
   // view's own "Dropdown options".
   selectOptions: Map<string, string[]>
+  // Drag-and-drop: a grouped link property → the list property on the linked
+  // notes that names this note back (e.g. experiment → tasks), kept in step
+  // when a row is dropped onto another group.
+  dropInverse: Map<string, string[]>
 }
