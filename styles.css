@@ -1064,3 +1064,84 @@
 .bcgt-drop-target .bcgt-subgroup-cell {
   box-shadow: inset 0 0 0 2px var(--interactive-accent);
 }
+
+/* Compact one-line rows: tight vertical padding, every cell centred so a pill
+   in one column leaves no gap under the text of the others, and the tree elbow
+   in the middle of the row so it meets the first-column text. Group and
+   sub-group header rows are always one line, so theirs is centred too. */
+.bcgt-rows-short .bcgt-cell {
+  padding-top: 2px;
+  padding-bottom: 2px;
+  vertical-align: middle;
+}
+
+/* The railed first cell keeps zero padding so its rail spans the full row. */
+.bcgt-rows-short .bcgt-cell.bcgt-rail {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.bcgt-rows-short .bcgt-rail > .bcgt-cell-content {
+  padding-top: 2px;
+  padding-bottom: 2px;
+}
+
+.bcgt-rows-short .bcgt-cell-content {
+  line-height: 1.4;
+}
+
+.bcgt-group-cell {
+  padding-top: 2px;
+  padding-bottom: 2px;
+}
+
+.bcgt-subgroup-cell .bcgt-group-label {
+  padding-top: 2px;
+  padding-bottom: 2px;
+}
+
+.bcgt-rows-short .bcgt-seg-ell::before,
+.bcgt-subgroup-cell .bcgt-seg-ell::before {
+  bottom: calc(50% - 1px);
+}
+
+.bcgt-rows-short .bcgt-seg-tee::after,
+.bcgt-rows-short .bcgt-seg-ell::after,
+.bcgt-subgroup-cell .bcgt-seg-tee::after,
+.bcgt-subgroup-cell .bcgt-seg-ell::after {
+  top: calc(50% - 1px);
+}
+
+/* Group and sub-group bands: no fixed minimum height (the native row-height
+   variable made idea bands taller than the rows under them), label centred. */
+.bcgt-group-cell,
+.bcgt-subgroup-cell {
+  height: auto;
+  vertical-align: middle;
+}
+
+/* Something outside the plugin pads the sub-group cell and gives its row a
+   height, so an idea band stood taller than the rows under it. Tag-qualified
+   selectors win over it; the label's own padding sets the band height. */
+.bcgt-table tr.bcgt-subgroup-header {
+  height: auto;
+}
+
+.bcgt-table tr.bcgt-subgroup-header td.bcgt-subgroup-cell {
+  height: auto;
+  min-height: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  line-height: 1.4;
+}
+
+/* The band text sits optically about 1.5px above the band's centre (the font's
+   glyphs ride high in their line box). Nudge only the text and the chevron, not
+   the rail, so the tree lines still meet the rows above and below. */
+.bcgt-group-inner > .bcgt-chevron,
+.bcgt-group-inner > .bcgt-group-count,
+.bcgt-group-inner > .bcgt-group-label,
+.bcgt-group-inner > .bcgt-subgroup-tally {
+  position: relative;
+  top: 1.5px;
+}
