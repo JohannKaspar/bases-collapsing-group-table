@@ -578,7 +578,7 @@
   visibility: hidden;
   pointer-events: none;
   white-space: nowrap;
-  font-size: var(--font-ui-small);
+  font-size: var(--bcgt-measure-fs, var(--font-ui-small));
 }
 
 .bcgt-measure .bcgt-cell-content,
@@ -1144,4 +1144,20 @@
 .bcgt-group-inner > .bcgt-subgroup-tally {
   position: relative;
   top: 1.5px;
+}
+
+/* Header like the built-in table: row-height band, small muted text in the
+   table's font size, no sort arrow (the Sort menu shows the order). */
+.bcgt-table .bcgt-col-header {
+  height: var(--bases-table-row-height, 30px);
+  padding-top: 0;
+  padding-bottom: 0;
+  font-size: inherit;
+  font-weight: var(--font-normal);
+  color: var(--bases-table-header-color, var(--text-muted));
+  vertical-align: middle;
+}
+
+.bcgt-table .bcgt-col-sort {
+  display: none;
 }

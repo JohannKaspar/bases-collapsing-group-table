@@ -1292,6 +1292,65 @@ const buildTable = (container: HTMLElement, args: BuildTableArgs): void => {
     })
   }
 
+  // ---- fit-to-content widths ----
+  // Badge, date, number and formula columns are exactly as wide as their widest
+  // value (or header); the free-text columns (the file name, text and list
+  // properties) share whatever width is left, in proportion to their saved
+  // widths. Recomputed when the container is resized. Widths set here are not
+  // persisted, so a fitted column re-fits on every render.
+  const isFlexCol = (col: BasesPropertyId): boolean => {
+    if (col === 'file.name' || col === 'file.path' || col === 'file.basename') return true
+    if (!col.startsWith('note.')) return false
+    if (settings.selectOptions.get(col.slice('note.'.length))) return false
+    const t = editTypeOf.get(col)
+    return t === 'text' || t === 'list' || t === undefined
+  }
+  const naturalWidth = (colIndex: number): number => {
+    const th = thEls[colIndex]
+    const measure = table.ownerDocument.body.createDiv('bcgt-measure')
+    measure.style.setProperty('--bcgt-measure-fs', table.ownerDocument.defaultView?.getComputedStyle(table).fontSize ?? '')
+    let max = 0
+    const measureClone = (source: Element | null, extra: number): void => {
+      if (!source) return
+      const clone = source.cloneNode(true) as HTMLElement
+      measure.empty()
+      measure.appendChild(clone)
+      max = Math.max(max, clone.getBoundingClientRect().width + extra)
+    }
+    measureClone(th?.querySelector('.bcgt-col-inner') ?? null, 0)
+    const rows = table.querySelectorAll('.bcgt-row')
+    const limit = Math.min(rows.length, 300)
+    for (let r = 0; r < limit; r++) {
+      const cell = rows[r].children[colIndex] as HTMLElement | undefined
+      const content = cell?.querySelector('.bcgt-cell-content') ?? null
+      // Railed first cells are indented by the tree; count the indent too.
+      const indent = cell && content ? content.getBoundingClientRect().left - cell.getBoundingClientRect().left : 0
+      measureClone(content, Math.max(0, indent))
+    }
+    measure.remove()
+    return max
+  }
+  const fitColumns = (): void => {
+    const avail = container.clientWidth
+    if (!table.isConnected || avail <= 0) return
+    const fitW = new Map<number, number>()
+    columns.forEach((col, i) => {
+      if (isFlexCol(col)) return
+      const w = naturalWidth(i)
+      if (w > 0) fitW.set(i, Math.max(MIN_COL_WIDTH, Math.ceil(w + 18)))
+    })
+    const flexIdx = columns.map((_, i) => i).filter((i) => !fitW.has(i))
+    const fixed = [...fitW.values()].reduce((a, b) => a + b, 0)
+    const flexBase = flexIdx.map((i) => {
+      const w = widths[columns[i]]
+      return typeof w === 'number' ? w : DEFAULT_COL_WIDTH
+    })
+    const baseSum = flexBase.reduce((a, b) => a + b, 0) || 1
+    const free = Math.max(avail - fixed - 2, flexIdx.length * MIN_COL_WIDTH)
+    fitW.forEach((w, i) => setColumnWidth(i, w))
+    flexIdx.forEach((i, k) => setColumnWidth(i, Math.max(MIN_COL_WIDTH, Math.floor((free * flexBase[k]) / baseSum))))
+  }
+
   // Forget any collapsed keys whose group/sub-group no longer exists.
   for (const k of [...collapsed]) {
     if (!allFoldKeys.has(k)) collapsed.delete(k)
@@ -1306,7 +1365,22 @@ const buildTable = (container: HTMLElement, args: BuildTableArgs): void => {
   if (win) {
     win.requestAnimationFrame(() => {
       void table.offsetHeight
+      fitColumns()
     });
+    // Re-split the free width when the pane is resized (widths only; the
+    // fitted columns keep their measured size).
+    let lastW = container.clientWidth
+    const ro = new win.ResizeObserver(() => {
+      const w = container.clientWidth
+      if (!table.isConnected) {
+        ro.disconnect()
+        return
+      }
+      if (Math.abs(w - lastW) < 2) return
+      lastW = w
+      fitColumns()
+    })
+    ro.observe(container)
   }
 };
 export default buildTable
