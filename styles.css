@@ -1161,3 +1161,9 @@
 .bcgt-table .bcgt-col-sort {
   display: none;
 }
+
+/* The resize handle drew its own hairline 3px beside the column border, which
+   read as a double divider. Show it only while hovering or dragging. */
+.bcgt-resize-handle::after {
+  background-color: transparent;
+}
